@@ -78,6 +78,23 @@ const QUEEN_THRESHOLD = 18;
 const FREEZE_THRESHOLD = 16;
 const EXPLORATION_DURATION = 18;
 
+const RESOURCE_META: Record<ResourceType, { label: string; icon: string }> = {
+  leaves: { label: 'Листья', icon: '🍃' },
+  nectar: { label: 'Нектар', icon: '🍯' },
+  grit: { label: 'Материалы', icon: '🪵' },
+};
+
+const NODE_ICONS: Record<ResourceType, string> = {
+  leaves: '🍃',
+  nectar: '🌸',
+  grit: '🪵',
+};
+
+const PHASE_ICON: Record<GamePhase, string> = {
+  day: '🌞',
+  night: '🌙',
+};
+
 function createInitialNodes(): ResourceNode[] {
   return [
     {
@@ -665,21 +682,25 @@ function App() {
           </p>
         </div>
         <div className="top-bar__status">
-          <div className="resource-chip">
-            <span className="resource-chip__label">Листья</span>
-            <strong>{formattedResources.leaves}</strong>
-            <span className="resource-chip__cap">/{state.capacity}</span>
-          </div>
-          <div className="resource-chip">
-            <span className="resource-chip__label">Нектар</span>
-            <strong>{formattedResources.nectar}</strong>
-            <span className="resource-chip__cap">/{state.capacity}</span>
-          </div>
-          <div className="resource-chip">
-            <span className="resource-chip__label">Материалы</span>
-            <strong>{formattedResources.grit}</strong>
-            <span className="resource-chip__cap">/{state.capacity}</span>
-          </div>
+          {(Object.keys(RESOURCE_META) as ResourceType[]).map((resource) => {
+            const meta = RESOURCE_META[resource];
+            const fill = Math.min(1, state.resources[resource] / state.capacity);
+            return (
+              <div key={resource} className="resource-chip">
+                <span className="resource-chip__icon" aria-hidden="true">
+                  {meta.icon}
+                </span>
+                <div className="resource-chip__content">
+                  <span className="resource-chip__label">{meta.label}</span>
+                  <strong>{formattedResources[resource]}</strong>
+                </div>
+                <span className="resource-chip__cap">/{state.capacity}</span>
+                <div className="resource-chip__progress" aria-hidden="true">
+                  <span style={{ width: `${fill * 100}%` }} />
+                </div>
+              </div>
+            );
+          })}
           <div className="meter">
             <span className="meter__label">Энергия колонии</span>
             <div className="meter__track">
@@ -687,7 +708,12 @@ function App() {
             </div>
           </div>
           <div className={`phase-indicator phase-indicator--${state.phase}`}>
-            <span>{state.phase === 'day' ? 'День' : 'Ночь'}</span>
+            <div className="phase-indicator__row">
+              <span className="phase-indicator__icon" role="img" aria-label={state.phase === 'day' ? 'День' : 'Ночь'}>
+                {PHASE_ICON[state.phase]}
+              </span>
+              <span>{state.phase === 'day' ? 'День' : 'Ночь'}</span>
+            </div>
             <div className="phase-indicator__progress">
               <div style={{ width: `${phaseProgress * 100}%` }} />
             </div>
@@ -713,6 +739,7 @@ function App() {
               .filter((node) => node.status !== 'locked')
               .map((node) => {
                 const thickness = 1 + node.traffic * 4;
+                const isActive = node.traffic > 0.01;
                 return (
                   <line
                     key={`route-${node.id}`}
@@ -721,7 +748,7 @@ function App() {
                     x2={node.x}
                     y2={node.y}
                     strokeWidth={thickness}
-                    className={`map__route map__route--${node.type}`}
+                    className={`map__route map__route--${node.type} ${isActive ? 'map__route--active' : ''}`}
                   />
                 );
               })}
@@ -730,17 +757,28 @@ function App() {
             {state.resourceNodes.map((node) => (
               <button
                 key={node.id}
-                className={`map-node map-node--${node.type} map-node--${node.status}`}
+                className={`map-node map-node--${node.type} map-node--${node.status} ${
+                  node.traffic > 0.15 ? 'map-node--active' : ''
+                }`}
                 style={{ left: `${node.x}%`, top: `${node.y}%` }}
                 onClick={() => dispatch({ type: 'revealNode', id: node.id })}
                 disabled={node.status !== 'locked'}
               >
-                <span className="map-node__icon">{node.status === 'locked' ? '?' : node.label[0]}</span>
+                <span className="map-node__icon" aria-hidden="true">
+                  {node.status === 'locked' ? '?' : NODE_ICONS[node.type]}
+                </span>
                 <span className="map-node__label">{node.label}</span>
-                {node.status !== 'locked' && (
-                  <span className="map-node__traffic" style={{ opacity: 0.2 + node.traffic * 0.8 }}>
-                    Трафик {Math.round(node.traffic * 100)}%
-                  </span>
+                {node.status === 'locked' ? (
+                  <span className="map-node__status">Требуется разведка</span>
+                ) : (
+                  <>
+                    <span className="map-node__status">
+                      {node.status === 'active' ? 'Активный маршрут' : 'Готов к добыче'}
+                    </span>
+                    <span className="map-node__traffic" style={{ opacity: 0.2 + node.traffic * 0.8 }}>
+                      Трафик {Math.round(node.traffic * 100)}%
+                    </span>
+                  </>
                 )}
                 <span className="map-node__tooltip">
                   {node.description}
